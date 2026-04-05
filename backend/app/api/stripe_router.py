@@ -63,8 +63,8 @@ async def create_checkout_session(
                     "quantity": 1,
                 }
             ],
-            success_url=settings.stripe_success_url,
-            cancel_url=settings.stripe_cancel_url,
+            success_url=settings.stripe_success_url or "http://localhost:3000/verify?upgraded=true",
+            cancel_url= settings.stripe_cancel_url or "http://localhost:3000/pricing",
             metadata={"user_id": str(current_user.id)},
             customer_email=current_user.email,
         )
