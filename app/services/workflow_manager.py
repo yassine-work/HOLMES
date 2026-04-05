@@ -1,6 +1,7 @@
 """Primary service orchestrating verification workflow and persistence."""
 
 import asyncio
+import hashlib
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
@@ -11,6 +12,9 @@ from app.db.models import VerificationHistory
 from app.schemas.requests import VerificationRequest
 from app.services.cache_manager import CacheManager
 from app.services.debate_manager import DebateManager
+from app.tools.bitmind_image_tool import BitmindImageTool
+from app.tools.bitmind_video_tool import BitmindVideoTool
+from app.tools.hf_text_tool import HFTextTool
 from app.tools.ninja_tool import NinjaTool
 from app.tools.sightengine_tool import SightengineTool
 from app.tools.virustotal_tool import VirusTotalTool
@@ -27,6 +31,9 @@ class WorkflowManager:
         self.sightengine = SightengineTool()
         self.zenserp = ZenserpTool()
         self.virustotal = VirusTotalTool()
+        self.hf_text = HFTextTool()
+        self.bitmind_image = BitmindImageTool()
+        self.bitmind_video = BitmindVideoTool()
         self.ninja = NinjaTool()
 
     @staticmethod
@@ -36,8 +43,11 @@ class WorkflowManager:
         return bool(parsed.scheme in {"http", "https"} and parsed.netloc)
 
     @staticmethod
-    def _build_cache_key(content_type: str, content: str) -> str:
+    def _build_cache_key(content_type: str, content: str, content_b64: str | None = None) -> str:
         """Build deterministic cache key for verification requests."""
+        if content_b64:
+            b64_fingerprint = hashlib.sha256(content_b64.encode("utf-8")).hexdigest()
+            return f"verification:{content_type}:{content}:b64:{b64_fingerprint}"
         return f"verification:{content_type}:{content}"
 
     @staticmethod
@@ -51,10 +61,11 @@ class WorkflowManager:
 
     async def run_verification(self, user_id: UUID, payload: VerificationRequest) -> VerificationHistory:
         """Execute cached or fresh verification flow and persist final result."""
-        cache_key = self._build_cache_key(payload.content_type.value, payload.content)
+        content_b64 = getattr(payload, "content_b64", None)
+        cache_key = self._build_cache_key(payload.content_type.value, payload.content, content_b64=content_b64)
         cached_result = await self.cache.get_json(cache_key)
         if cached_result:
-            return VerificationHistory(
+            history = VerificationHistory(
                 user_id=user_id,
                 content_type=payload.content_type,
                 input_reference=payload.content,
@@ -62,16 +73,35 @@ class WorkflowManager:
                 confidence=float(cached_result.get("confidence", 0.5)),
                 details=cached_result.get("details", {}),
             )
+            self.db.add(history)
+            await self.db.commit()
+            await self.db.refresh(history)
+            return history
 
-        sightengine_result, zenserp_result, virustotal_result = await asyncio.gather(
+        results = await asyncio.gather(
             self.sightengine.analyze(payload.content_type.value, payload.content),
             self.zenserp.analyze(payload.content_type.value, payload.content),
             self.virustotal.analyze(payload.content_type.value, payload.content),
+            self.hf_text.analyze(payload.content_type.value, payload.content),
+            self.bitmind_image.analyze(
+                payload.content_type.value,
+                payload.content,
+                content_b64=content_b64,
+            ),
+            self.bitmind_video.analyze(
+                payload.content_type.value,
+                payload.content,
+                content_b64=content_b64,
+            ),
         )
+        sightengine_result, zenserp_result, virustotal_result, hf_text_result, bitmind_image_result, bitmind_video_result = results
         tool_findings: dict[str, Any] = {
             "sightengine": sightengine_result,
             "zenserp": zenserp_result,
             "virustotal": virustotal_result,
+            "hf_text": hf_text_result,
+            "bitmind_image": bitmind_image_result,
+            "bitmind_video": bitmind_video_result,
         }
 
         source_data: dict[str, Any] | None = None

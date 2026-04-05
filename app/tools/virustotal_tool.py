@@ -22,6 +22,14 @@ class VirusTotalTool:
 
     async def analyze(self, content_type: str, content: str) -> dict[str, Any]:
         """Run malware/reputation checks when applicable."""
+        if content_type not in {"url"}:
+            return {
+                "provider": "virustotal",
+                "content_type": content_type,
+                "status": "skipped",
+                "summary": "VirusTotal only applies to URL content.",
+            }
+
         if not self.api_key:
             return {
                 "provider": "virustotal",

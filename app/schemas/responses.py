@@ -1,9 +1,10 @@
 """Generic response schemas for API endpoints."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import ContentType
 
@@ -15,8 +16,10 @@ class VerificationResponse(BaseModel):
 
     id: UUID
     content_type: ContentType
+    input_reference: str
     verdict: str
     confidence: float
+    details: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
 

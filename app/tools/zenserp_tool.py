@@ -22,6 +22,14 @@ class ZenserpTool:
 
     async def analyze(self, content_type: str, content: str) -> dict[str, Any]:
         """Run source/context checks via Zenserp."""
+        if content_type not in {"text", "url"}:
+            return {
+                "provider": "zenserp",
+                "content_type": content_type,
+                "status": "skipped",
+                "summary": "Zenserp search only applies to text and URL content.",
+            }
+
         if not self.api_key:
             return {
                 "provider": "zenserp",

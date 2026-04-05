@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import uuid
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -316,3 +317,185 @@ async def test_debate_manager_runs_agents_in_parallel(db_session, monkeypatch) -
         tool_findings=None,
     )
     assert result["verdict"]["label"] == "likely_authentic"
+
+
+@pytest.mark.asyncio
+async def test_hf_text_tool_skips_for_non_text() -> None:
+    """HF text tool should skip when content type is not text."""
+    from app.tools.hf_text_tool import HFTextTool
+
+    tool = HFTextTool()
+    result = await tool.analyze("image", "https://example.com/img.jpg")
+
+    assert result["status"] == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_bitmind_image_tool_skips_for_non_image() -> None:
+    """BitMind image tool should skip when content type is not image."""
+    from app.tools.bitmind_image_tool import BitmindImageTool
+
+    tool = BitmindImageTool()
+    result = await tool.analyze("text", "some text content")
+
+    assert result["status"] == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_bitmind_video_tool_skips_for_non_video() -> None:
+    """BitMind video tool should skip when content type is not video."""
+    from app.tools.bitmind_video_tool import BitmindVideoTool
+
+    tool = BitmindVideoTool()
+    result = await tool.analyze("text", "some text content")
+
+    assert result["status"] == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_workflow_includes_all_six_tools_in_findings(db_session) -> None:
+    """Workflow tool findings should include all six parallel tool outputs."""
+    user = User(
+        email=f"test_workflow_{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=get_password_hash("WorkflowPass123!"),
+        is_active=True,
+        is_admin=False,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    manager = WorkflowManager(db=db_session, cache=FakeCache())
+
+    async def fake_tool(*_: Any, **__: Any) -> dict[str, Any]:
+        return {"status": "ok"}
+
+    async def fake_debate(*_: Any, **__: Any) -> dict[str, Any]:
+        return {
+            "defense": {"content": "d"},
+            "prosecution": {"content": "p"},
+            "verdict": {"label": "likely_authentic", "confidence": 0.75},
+        }
+
+    manager.sightengine.analyze = fake_tool
+    manager.zenserp.analyze = fake_tool
+    manager.virustotal.analyze = fake_tool
+    manager.hf_text.analyze = fake_tool
+    manager.bitmind_image.analyze = fake_tool
+    manager.bitmind_video.analyze = fake_tool
+    manager.debate_manager.evaluate = fake_debate
+
+    payload = VerificationRequest(content_type=ContentType.TEXT, content="tool coverage test")
+    history = await manager.run_verification(user_id=user.id, payload=payload)
+
+    tools = history.details["tools"]
+    assert "sightengine" in tools
+    assert "zenserp" in tools
+    assert "virustotal" in tools
+    assert "hf_text" in tools
+    assert "bitmind_image" in tools
+    assert "bitmind_video" in tools
+
+
+@pytest.mark.asyncio
+async def test_bitmind_image_uses_content_b64_when_provided(monkeypatch) -> None:
+    """BitMind image tool should use provided content_b64 and skip URL fetch."""
+    from app.tools.bitmind_image_tool import BitmindImageTool
+
+    tool = BitmindImageTool()
+    tool.api_key = "fake-key"
+    tool.gemini_api_key = ""
+
+    tool._fetch_image = AsyncMock(side_effect=AssertionError("_fetch_image should not be called"))
+    tool._detect = AsyncMock(return_value={"score": 0.9, "label": "ai-generated"})
+    monkeypatch.setattr(tool, "_explain", lambda *_args, **_kwargs: "explanation text")
+
+    content_b64 = base64.b64encode(b"fake-image-bytes").decode("utf-8")
+    result = await tool.analyze("image", "filename.jpg", content_b64=content_b64)
+
+    assert result["status"] == "ok"
+    tool._fetch_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_bitmind_image_skips_when_no_url_and_no_b64() -> None:
+    """BitMind image tool should skip when neither URL nor base64 content is provided."""
+    from app.tools.bitmind_image_tool import BitmindImageTool
+
+    tool = BitmindImageTool()
+    result = await tool.analyze("image", "not-a-url-just-filename.jpg", content_b64=None)
+
+    assert result["status"] == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_hf_text_falls_back_to_gemini_when_no_hf_token(monkeypatch) -> None:
+    """HF text tool should run Gemini-only fallback path when HF token is missing."""
+    from app.tools import hf_text_tool
+    from app.tools.hf_text_tool import HFTextTool
+
+    tool = HFTextTool()
+    tool.hf_token = ""
+    tool.gemini_api_key = "fake"
+
+    mock_response = MagicMock()
+    mock_response.text = "Verdict: likely AI-generated\nWhy: ...\nCaveats: ..."
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = mock_response
+    monkeypatch.setattr(hf_text_tool.genai, "configure", lambda **_kwargs: None)
+    monkeypatch.setattr(hf_text_tool.genai, "GenerativeModel", lambda _name: mock_model)
+
+    result = await tool.analyze("text", "Some text to analyze")
+
+    assert result["status"] == "ok"
+    assert result["provider"] == "gemini_text"
+
+
+@pytest.mark.asyncio
+async def test_workflow_passes_content_b64_to_image_tool(db_session) -> None:
+    """Workflow manager should pass payload content_b64 into BitMind image tool call."""
+    user = User(
+        email=f"test_workflow_{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password=get_password_hash("WorkflowPass123!"),
+        is_active=True,
+        is_admin=False,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    manager = WorkflowManager(db=db_session, cache=FakeCache())
+    captured: dict[str, Any] = {}
+
+    async def fake_tool(*_: Any, **__: Any) -> dict[str, Any]:
+        return {"status": "ok"}
+
+    async def fake_bitmind_image(content_type: str, content: str, content_b64: str | None = None) -> dict[str, Any]:
+        captured["content_type"] = content_type
+        captured["content"] = content
+        captured["content_b64"] = content_b64
+        return {"status": "ok"}
+
+    async def fake_debate(*_: Any, **__: Any) -> dict[str, Any]:
+        return {
+            "defense": {"content": "d"},
+            "prosecution": {"content": "p"},
+            "verdict": {"label": "likely_authentic", "confidence": 0.7},
+        }
+
+    manager.sightengine.analyze = fake_tool
+    manager.zenserp.analyze = fake_tool
+    manager.virustotal.analyze = fake_tool
+    manager.hf_text.analyze = fake_tool
+    manager.bitmind_image.analyze = fake_bitmind_image
+    manager.bitmind_video.analyze = fake_tool
+    manager.debate_manager.evaluate = fake_debate
+
+    payload = VerificationRequest(
+        content_type=ContentType.IMAGE,
+        content="photo.jpg",
+        content_b64="abc123base64",
+    )
+    await manager.run_verification(user_id=user.id, payload=payload)
+
+    assert captured["content_b64"] == "abc123base64"

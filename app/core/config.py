@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
     allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
+    upload_dir: str = "uploads"
+    max_upload_size_mb: int = 25
 
     secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
@@ -36,6 +38,9 @@ class Settings(BaseSettings):
     zenserp_api_key: str = ""
     virustotal_api_key: str = ""
     ninja_api_key: str = ""
+    hf_token: str = ""
+    bitmind_api_key: str = ""
+    gemini_api_key: str = ""
 
     default_admin_email: str = "admin@holmes.local"
     default_admin_password: str = "ChangeMe_Admin123!"

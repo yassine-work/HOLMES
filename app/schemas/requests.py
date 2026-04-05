@@ -17,3 +17,4 @@ class VerificationRequest(BaseModel):
 
     content_type: ContentType
     content: str = Field(min_length=1)
+    content_b64: str | None = None
