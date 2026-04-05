@@ -2,7 +2,7 @@
 
 ![Python 3.14](https://img.shields.io/badge/Python-3.14-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-009688) ![Next.js](https://img.shields.io/badge/Next.js-14-black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791) ![Redis](https://img.shields.io/badge/Redis-Cache-red) ![Groq](https://img.shields.io/badge/LLM-Groq-orange) ![Stripe](https://img.shields.io/badge/Payments-Stripe-635BFF)
 
-**Live Platform URL:** holmes-teal.vercel.app
+**Live Platform URL:** (https://holmes-teal.vercel.app)
 
 > 📊 **Presentation:** [View on Canva](https://www.canva.com/design/DAHF87NKv9I/dhecJsjTZn_n4CkXv_hCog/edit)
 
