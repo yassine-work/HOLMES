@@ -7,6 +7,7 @@ __pycache__/
 env/
 .venv/
 venv/
+backend/env/
 
 # Environment variables / secrets
 .env
@@ -45,6 +46,7 @@ build/
 
 # Runtime upload/storage folders
 uploads/
+backend/uploads/
 
 # Large media/binary files
 *.mp4
@@ -57,11 +59,6 @@ uploads/
 *.m4a
 *.flac
 *.ogg
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.webp
 *.zip
 *.tar
 *.gz
