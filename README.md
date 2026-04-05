@@ -2,7 +2,11 @@
 
 ![Python 3.14](https://img.shields.io/badge/Python-3.14-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-009688) ![Next.js](https://img.shields.io/badge/Next.js-14-black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791) ![Redis](https://img.shields.io/badge/Redis-Cache-red) ![Groq](https://img.shields.io/badge/LLM-Groq-orange) ![Stripe](https://img.shields.io/badge/Payments-Stripe-635BFF)
 
+**Live Platform URL:** holmes-teal.vercel.app
+
 Holmes is a production-style verification platform for journalists, trust-and-safety teams, investigators, and moderation backends that need to triage suspicious text, URLs, images, and video quickly. It combines asynchronous tool intelligence, adversarial multi-agent reasoning, and deterministic caching to produce explainable verdicts with bounded latency and controlled API spend. Instead of a single opaque LLM answer, Holmes persists auditable evidence and debate traces in PostgreSQL and exposes them through a FastAPI API and Next.js frontend.
+
+![Holmes Home](docs/home.jpeg)
 
 ---
 
@@ -509,11 +513,18 @@ Current coverage focus is API auth/admin/tier controls, workflow orchestration, 
 
 ## Deployment
 
-- **Backend**: Deploy as ASGI app on Railway, Render, Fly.io, or any container host; run `uvicorn app.main:app` (or Gunicorn+Uvicorn workers).
-- **Frontend**: Deploy `frontend/` to Vercel for native Next.js hosting.
-- **Database**: Use Neon PostgreSQL with SSL-enabled `DATABASE_URL`.
-- **Redis**: Use Upstash (or managed Redis) for cache/Celery transport.
-- **Stripe**: Configure webhook endpoint to `/api/v1/stripe/webhook` and set `STRIPE_WEBHOOK_SECRET`.
+- Holmes is already deployed in a live environment.
+- **Live platform URL**: holmes-teal.vercel.app
+- **Extension default backend base URL**: `holmes-teal.vercel.app/` (see `ai-detector-extension/background.js`).
+- **Production data/services**: Neon PostgreSQL, Redis cache, and Stripe webhook integration are wired through environment variables in the backend settings model.
+
+---
+
+## Browser Extension
+
+Holmes ships with a Chrome extension (`ai-detector-extension/`) that lets users run URL, page-media, image, and video checks directly from a popup UI or right-click context menu, then view confidence/explainability and scan history without leaving the browser; the extension connects to Holmes by posting detections to `${backendBase}/api/detect/{type}` (default base is `holmes-teal.vercel.app/` and can be overridden in extension Settings, with optional `Authorization` / `X-API-Key` headers), installation is `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select `ai-detector-extension/` (or your `extension/` folder alias), and tier requirements follow backend policy: free tier supports text/URL flows while premium is required for full media verification paths (image/video upload and advanced pipeline access).
+
+![Holmes Extension](docs/extension.jpeg)
 
 ---
 
