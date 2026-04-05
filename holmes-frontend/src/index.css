@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: #05080f;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-md;
+  }
+
+  .btn-primary {
+    @apply rounded-xl bg-electric-500 px-6 py-3 font-semibold text-white transition-all duration-200 hover:bg-electric-400;
+  }
+
+  .btn-ghost {
+    @apply rounded-xl border border-white/20 px-6 py-3 font-semibold text-white transition-all duration-200 hover:border-electric-400 hover:text-electric-400;
+  }
+
+  .input-base {
+    @apply w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-slate-500 focus:border-electric-500 focus:outline-none;
+  }
+
+  .accent-label {
+    @apply font-mono text-sm text-electric-400;
+  }
+}
