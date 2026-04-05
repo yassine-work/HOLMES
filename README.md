@@ -4,6 +4,9 @@
 
 **Live Platform URL:** holmes-teal.vercel.app
 
+> 📊 **Presentation:** [View on Canva](https://www.canva.com/design/DAHF87NKv9I/dhecJsjTZn_n4CkXv_hCog/edit)
+
+
 Holmes is a production-style verification platform for journalists, trust-and-safety teams, investigators, and moderation backends that need to triage suspicious text, URLs, images, and video quickly. It combines asynchronous tool intelligence, adversarial multi-agent reasoning, and deterministic caching to produce explainable verdicts with bounded latency and controlled API spend. Instead of a single opaque LLM answer, Holmes persists auditable evidence and debate traces in PostgreSQL and exposes them through a FastAPI API and Next.js frontend.
 
 ![Holmes Home](docs/home.jpeg)
@@ -47,19 +50,19 @@ Misinformation and synthetic media now scale faster than manual review teams, an
 						│                                                               │
 						│                                                               │
 						▼                                                               ▼
-┌──────────────────────────────────────────────┐                ┌──────────────────────────────────────────────┐
-│          FREE PIPELINE (text/url)           │                │               PREMIUM PIPELINE                │
-│  Zenserp + single Groq verdict call         │                │  1) Redis cache check                         │
-│  (no image/video/audio)                     │                │  2) asyncio.gather tool fan-out               │
-└──────────────────────────────────────────────┘                │  3) URL source intel (Ninja, conditional)    │
-																					 │  4) DebateManager (parallel defense/prosecution)
-																					 │  5) JudgeAgent verdict + heuristic fallback   │
-																					 │  6) Persist + cache write                      │
-																					 └──────────────────────────────────────────────┘
-																											 │
-																											 ▼
+┌──────────────────────────────────────────────┐            ┌──────────────────────────────────────────────┐
+│          FREE PIPELINE (text/url)           │             │               PREMIUM PIPELINE               │
+│  Zenserp + single Groq verdict call         │             │  1) Redis cache check                        │
+│  (no image/video/audio)                     │             │  2) asyncio.gather tool fan-out              │
+└──────────────────────────────────────────────┘            │  3) URL source intel (Ninja, conditional)    │
+															│  4) DebateManager (parallel defense/prosecution)
+															│  5) JudgeAgent verdict + heuristic fallback  │
+															│  6) Persist + cache write                    │
+															└──────────────────────────────────────────────┘
+																										│
+																									    ▼
 ┌────────────────────────────────────────────── Tool Intelligence Layer ───────────────────────────────────────┐
-│ sightengine_tool.py    zenserp_tool.py    virustotal_tool.py    ninja_tool.py                               │
+│ sightengine_tool.py    zenserp_tool.py    virustotal_tool.py    ninja_tool.py                                │
 │ hf_text_tool.py        bitmind_image_tool.py                    bitmind_video_tool.py                        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 																											 │
@@ -67,9 +70,9 @@ Misinformation and synthetic media now scale faster than manual review teams, an
 ┌────────────────────────────────────────────── Agent Layer ───────────────────────────────────────────────────┐
 │ prosecution_agent.py  defense_agent.py  judge_agent.py  (+ agent_utils.py evidence summarization)           │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-																											 │
-								 ┌────────────────────────────────────────────────────────┴───────────────────────────┐
-								 ▼                                                                                    ▼
+																						  │
+								 ┌────────────────────────────────────────────────────────┴────────────────┐
+								 ▼                                                                         ▼
 ┌──────────────────────────────────────────────┐                           ┌───────────────────────────────────┐
 │ Redis cache (CacheManager)                  │                           │ Neon PostgreSQL                   │
 │ key: verification:{content_type}:{content}  │                           │ users / verification_history /tasks│
@@ -78,14 +81,14 @@ Misinformation and synthetic media now scale faster than manual review teams, an
 └──────────────────────────────────────────────┘                           └───────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Stripe Flow                                                                                                   │
-│ create-checkout-session → Stripe Checkout → /api/v1/stripe/webhook → User.is_premium toggle                 │
+│ Stripe Flow                                                                                                  │
+│ create-checkout-session → Stripe Checkout → /api/v1/stripe/webhook → User.is_premium toggle                  │
 │ customer.subscription.deleted / invoice.payment_failed → downgrade (except admin users)                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Background Worker                                                                                              │
-│ Celery app (app/worker/background_tasks.py) with Redis broker/backend;                                      │
+│ Background Worker                                                                                            │
+│ Celery app (app/worker/background_tasks.py) with Redis broker/backend;                                       │
 │ process_verification task currently scaffolded for queued async expansion.                                   │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
