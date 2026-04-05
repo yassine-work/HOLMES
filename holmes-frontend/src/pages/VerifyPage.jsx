@@ -23,6 +23,7 @@ function timeAgo(isoDate) {
 function VerifyPage() {
   const [contentType, setContentType] = useState('text')
   const [content, setContent] = useState('')
+  const [selectedFile, setSelectedFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(true)
   const [history, setHistory] = useState([])
@@ -32,6 +33,15 @@ function VerifyPage() {
     if (contentType === 'text') return 'Paste text content to analyze...'
     return 'https://example.com/content'
   }, [contentType])
+
+  const fileAccept = useMemo(() => {
+    if (contentType === 'image') return 'image/*'
+    if (contentType === 'video') return 'video/*'
+    if (contentType === 'audio') return 'audio/*'
+    return ''
+  }, [contentType])
+
+  const isFileType = ['image', 'video', 'audio'].includes(contentType)
 
   const fetchHistory = async () => {
     setHistoryLoading(true)
@@ -51,32 +61,49 @@ function VerifyPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!content.trim()) {
+    if (isFileType) {
+      if (!selectedFile) {
+        toast.error('Please select a file to verify.')
+        return
+      }
+    } else if (!content.trim()) {
       toast.error('Please enter content to verify.')
       return
     }
 
     setLoading(true)
     try {
-      const payload = {
-        content_type: contentType,
-        content,
-      }
-
       let data
-      try {
-        const response = await api.post('/upload/verify', payload)
+
+      if (isFileType) {
+        const formData = new FormData()
+        formData.append('content_type', contentType)
+        formData.append('file', selectedFile)
+
+        const response = await api.post('/upload/verify-file', formData)
         data = response.data
-      } catch (error) {
-        if (error.response?.status !== 404) {
-          throw error
+      } else {
+        const payload = {
+          content_type: contentType,
+          content,
         }
-        const fallback = await api.post('/verify', payload)
-        data = fallback.data
+
+        try {
+          const response = await api.post('/upload/verify', payload)
+          data = response.data
+        } catch (error) {
+          if (error.response?.status !== 404) {
+            throw error
+          }
+          const fallback = await api.post('/verify', payload)
+          data = fallback.data
+        }
       }
 
       toast.success('Verification completed.')
       navigate(`/result/${data.id}`, { state: { history: data } })
+      setContent('')
+      setSelectedFile(null)
     } catch (error) {
       const message = error.response?.data?.detail || 'Verification failed.'
       toast.error(Array.isArray(message) ? message.join(', ') : message)
@@ -97,7 +124,11 @@ function VerifyPage() {
               key={type}
               type={type}
               active={type === contentType}
-              onClick={() => setContentType(type)}
+              onClick={() => {
+                setContentType(type)
+                setSelectedFile(null)
+                setContent('')
+              }}
             />
           ))}
         </div>
@@ -112,6 +143,21 @@ function VerifyPage() {
               onChange={(event) => setContent(event.target.value)}
               required
             />
+          ) : isFileType ? (
+            <div className="space-y-2">
+              <input
+                type="file"
+                className="input-base file:mr-4 file:rounded-lg file:border-0 file:bg-electric-500 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
+                accept={fileAccept}
+                onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                required
+              />
+              {selectedFile && (
+                <p className="text-sm text-slate-400">
+                  Selected: <span className="font-mono text-electric-400">{selectedFile.name}</span>
+                </p>
+              )}
+            </div>
           ) : (
             <input
               type="text"
