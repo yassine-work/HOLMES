@@ -518,7 +518,6 @@ Current coverage focus is API auth/admin/tier controls, workflow orchestration, 
 
 - Holmes is already deployed in a live environment.
 - **Live platform URL**: holmes-teal.vercel.app
-- **Extension default backend base URL**: `holmes-teal.vercel.app/` (see `ai-detector-extension/background.js`).
 - **Production data/services**: Neon PostgreSQL, Redis cache, and Stripe webhook integration are wired through environment variables in the backend settings model.
 
 ---
