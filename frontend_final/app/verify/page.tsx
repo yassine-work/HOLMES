@@ -1,17 +1,37 @@
 "use client";
 
-import { LoaderCircle, UploadCloud } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { AlertTriangle, LoaderCircle, UploadCloud, X } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 
-import { HolmesContentType, isAuthenticated, submitVerification } from "@/lib/api";
+import {
+  HolmesContentType,
+  createStripeCheckout,
+  isAuthenticated,
+  submitVerification,
+} from "@/lib/api";
+import { useUserProfile } from "@/providers/user-profile-provider";
 
 type UploadMode = "url" | "file";
 
 const CONTENT_TYPES: HolmesContentType[] = ["text", "image", "video", "audio", "url"];
+const FREE_CONTENT_TYPES: HolmesContentType[] = ["text", "url"];
+
+function toFriendlyErrorMessage(message: string): string {
+  if (message.toLowerCase().includes("file upload requires a premium subscription")) {
+    return "File verification is available on Premium. Use the Upgrade to Premium button to unlock image/video/audio analysis.";
+  }
+  return message;
+}
+
+function isPremiumRestrictionError(message: string): boolean {
+  return message.toLowerCase().includes("file upload requires a premium subscription");
+}
 
 export default function VerifyPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { isPremium, refreshProfile } = useUserProfile();
 
   const [contentType, setContentType] = useState<HolmesContentType>("text");
   const [textValue, setTextValue] = useState("");
@@ -21,12 +41,47 @@ export default function VerifyPage() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUpgradeLoading, setIsUpgradeLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [showUpgradedBanner, setShowUpgradedBanner] = useState(false);
+  const [premiumPopup, setPremiumPopup] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated()) {
       router.replace("/login");
     }
   }, [router]);
+
+  useEffect(() => {
+    if (!isPremium && !FREE_CONTENT_TYPES.includes(contentType)) {
+      setContentType("text");
+      setSelectedFile(null);
+      setMediaInputMode("url");
+    }
+  }, [contentType, isPremium]);
+
+  useEffect(() => {
+    const upgraded = searchParams.get("upgraded") === "true";
+    if (!upgraded) {
+      return;
+    }
+
+    setShowUpgradedBanner(true);
+    void refreshProfile();
+
+    const timeout = window.setTimeout(() => {
+      setShowUpgradedBanner(false);
+    }, 5_000);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [refreshProfile, searchParams]);
+
+  const visibleContentTypes = useMemo(
+    () => (isPremium ? CONTENT_TYPES : FREE_CONTENT_TYPES),
+    [isPremium],
+  );
 
   const currentAccept = useMemo(() => {
     if (contentType === "image") {
@@ -120,20 +175,100 @@ export default function VerifyPage() {
       const result = await submitVerification({ contentType, content });
       router.push(`/result/${result.job_id}`);
     } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Unable to run verification.",
-      );
+      if (submitError instanceof Error) {
+        if (isPremiumRestrictionError(submitError.message)) {
+          setPremiumPopup(toFriendlyErrorMessage(submitError.message));
+          setError(null);
+        } else {
+          setError(toFriendlyErrorMessage(submitError.message));
+        }
+      } else {
+        setError("Unable to run verification.");
+      }
     } finally {
       setIsLoading(false);
     }
   }
 
+  async function onUpgradeToPremium() {
+    if (isUpgradeLoading) {
+      return;
+    }
+
+    setCheckoutError(null);
+    setIsUpgradeLoading(true);
+
+    try {
+      const response = await createStripeCheckout();
+      window.location.href = response.checkout_url;
+    } catch (checkoutFailure) {
+      const message =
+        checkoutFailure instanceof Error
+          ? checkoutFailure.message
+          : "Unable to create checkout session.";
+      setCheckoutError(
+        message.toLowerCase().includes("payment system not configured")
+          ? "Payment system not configured yet"
+          : message,
+      );
+    } finally {
+      setIsUpgradeLoading(false);
+    }
+  }
+
   return (
     <main className="px-4 py-10 md:px-8 md:py-14">
+      {premiumPopup ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4">
+          <div className="mc-panel w-full max-w-lg border-[#3a2a12] bg-[#2e2517] p-5 text-[#ffd89e] md:p-6">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <p className="pixel-title inline-flex items-center gap-2 text-[10px] text-[#ffd89e]">
+                <AlertTriangle className="h-4 w-4" />
+                Premium Required
+              </p>
+              <button
+                type="button"
+                onClick={() => setPremiumPopup(null)}
+                className="mc-button mc-button-stone inline-flex h-7 w-7 items-center justify-center p-0 text-[10px]"
+                aria-label="Close modal"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <p className="text-lg leading-5">{premiumPopup}</p>
+
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPremiumPopup(null);
+                  router.push("/pricing");
+                }}
+                className="mc-button mc-button-result inline-flex items-center px-3 py-2 text-[10px] text-[#eff5ff]"
+              >
+                Go to Pricing
+              </button>
+              <button
+                type="button"
+                onClick={() => setPremiumPopup(null)}
+                className="mc-button mc-button-stone inline-flex items-center px-3 py-2 text-[10px]"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mx-auto w-full max-w-6xl">
         <section className="mc-panel p-5 md:p-7">
+          {showUpgradedBanner ? (
+            <div className="mc-slot mb-5 px-3 py-2 text-lg leading-5 text-[#79e286]">
+              Welcome to Premium! You now have access to all verification features.
+            </div>
+          ) : null}
+
           <h1 className="pixel-title text-lg leading-relaxed text-[#eff5ff] md:text-xl">
             Verification Pipeline
           </h1>
@@ -146,7 +281,7 @@ export default function VerifyPage() {
               Content Type
             </p>
             <div className="grid gap-2 sm:grid-cols-5">
-              {CONTENT_TYPES.map((type) => (
+              {visibleContentTypes.map((type) => (
                 <button
                   key={type}
                   type="button"
@@ -160,6 +295,22 @@ export default function VerifyPage() {
                 </button>
               ))}
             </div>
+
+            {!isPremium ? (
+              <div className="mc-slot mt-3 flex flex-col items-start gap-3 p-3 md:flex-row md:items-center md:justify-between">
+                <p className="text-lg leading-5 text-[#d8e5f6]">
+                  You are on the free plan. Upgrade to Premium for image, video, and audio verification with our full AI pipeline.
+                </p>
+                <button
+                  type="button"
+                  onClick={onUpgradeToPremium}
+                  disabled={isUpgradeLoading}
+                  className="mc-button mc-button-result inline-flex items-center gap-2 px-3 py-2 text-[10px] text-[#eff5ff] disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  {isUpgradeLoading ? "Redirecting..." : "Upgrade to Premium"}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-6">
@@ -290,6 +441,12 @@ export default function VerifyPage() {
             {error ? (
               <p className="mc-slot mt-3 px-3 py-2 text-lg leading-5 text-[#ff9595]">
                 {error}
+              </p>
+            ) : null}
+
+            {checkoutError ? (
+              <p className="mc-slot mt-3 px-3 py-2 text-lg leading-5 text-[#ff9595]">
+                {checkoutError}
               </p>
             ) : null}
           </div>

@@ -4,6 +4,7 @@ import { Press_Start_2P, VT323 } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
 import { QueryProvider } from "@/providers/query-provider";
 import { SoundProvider } from "@/providers/sound-provider";
+import { UserProfileProvider } from "@/providers/user-profile-provider";
 
 import "./globals.css";
 
@@ -35,7 +36,9 @@ export default function RootLayout({
       <body>
         <QueryProvider>
           <SoundProvider>
-            <AppShell>{children}</AppShell>
+            <UserProfileProvider>
+              <AppShell>{children}</AppShell>
+            </UserProfileProvider>
           </SoundProvider>
         </QueryProvider>
       </body>

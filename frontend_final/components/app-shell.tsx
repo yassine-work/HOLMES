@@ -11,8 +11,12 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-function isPublicAuthRoute(pathname: string): boolean {
+function isAuthRoute(pathname: string): boolean {
   return pathname === "/login" || pathname === "/register";
+}
+
+function isPublicRoute(pathname: string): boolean {
+  return isAuthRoute(pathname) || pathname === "/pricing";
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -43,14 +47,15 @@ export function AppShell({ children }: AppShellProps) {
       return;
     }
 
-    const isAuthRoute = isPublicAuthRoute(pathname);
+    const authRoute = isAuthRoute(pathname);
+    const publicRoute = isPublicRoute(pathname);
 
-    if (!authed && !isAuthRoute) {
+    if (!authed && !publicRoute) {
       router.replace("/login");
       return;
     }
 
-    if (authed && isAuthRoute) {
+    if (authed && authRoute) {
       router.replace("/verify");
     }
   }, [authed, pathname, ready, router]);
@@ -59,13 +64,13 @@ export function AppShell({ children }: AppShellProps) {
     return null;
   }
 
-  const isAuthRoute = isPublicAuthRoute(pathname);
+  const publicRoute = isPublicRoute(pathname);
 
-  if (!authed && !isAuthRoute) {
+  if (!authed && !publicRoute) {
     return null;
   }
 
-  if (isAuthRoute) {
+  if (publicRoute) {
     return <>{children}</>;
   }
 

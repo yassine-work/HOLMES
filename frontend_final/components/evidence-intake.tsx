@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import Image from "next/image";
 import {
+  AlertTriangle,
   AlertCircle,
   FileSearch,
   Link2,
@@ -12,6 +13,7 @@ import {
   ScrollText,
   ShieldEllipsis,
   UploadCloud,
+  X,
   XCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -28,6 +30,17 @@ import { createVerificationJob } from "@/lib/api";
 import { upsertJournalEntry } from "@/lib/journal";
 import { useSound } from "@/providers/sound-provider";
 
+function toFriendlyErrorMessage(message: string): string {
+  if (message.toLowerCase().includes("file upload requires a premium subscription")) {
+    return "File verification is available on Premium. Upgrade from the Pricing page to verify image/video/audio files.";
+  }
+  return message;
+}
+
+function isPremiumRestrictionError(message: string): boolean {
+  return message.toLowerCase().includes("file upload requires a premium subscription");
+}
+
 export function EvidenceIntake() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +51,7 @@ export function EvidenceIntake() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [premiumPopup, setPremiumPopup] = useState<string | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -107,7 +121,14 @@ export function EvidenceIntake() {
     }
 
     play("start");
-    await submitMutation.mutateAsync();
+    try {
+      await submitMutation.mutateAsync();
+    } catch (error) {
+      if (error instanceof Error && isPremiumRestrictionError(error.message)) {
+        setPremiumPopup(toFriendlyErrorMessage(error.message));
+      }
+      return;
+    }
   }
 
   return (
@@ -117,6 +138,49 @@ export function EvidenceIntake() {
       transition={{ duration: 0.35 }}
       className="mc-panel mx-auto w-full max-w-6xl p-5 md:p-7"
     >
+      {premiumPopup ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4">
+          <div className="mc-panel w-full max-w-lg border-[#3a2a12] bg-[#2e2517] p-5 text-[#ffd89e] md:p-6">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <p className="pixel-title inline-flex items-center gap-2 text-[10px] text-[#ffd89e]">
+                <AlertTriangle className="h-4 w-4" />
+                Premium Required
+              </p>
+              <button
+                type="button"
+                onClick={() => setPremiumPopup(null)}
+                className="mc-button mc-button-stone inline-flex h-7 w-7 items-center justify-center p-0 text-[10px]"
+                aria-label="Close modal"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <p className="text-lg leading-5">{premiumPopup}</p>
+
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPremiumPopup(null);
+                  router.push("/pricing");
+                }}
+                className="mc-button mc-button-result inline-flex items-center px-3 py-2 text-[10px] text-[#eff5ff]"
+              >
+                Go to Pricing
+              </button>
+              <button
+                type="button"
+                onClick={() => setPremiumPopup(null)}
+                className="mc-button mc-button-stone inline-flex items-center px-3 py-2 text-[10px]"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="pixel-label inline-flex items-center gap-2 bg-[#223043] px-3 py-1 text-[10px] text-[#d3e6ff]">
@@ -369,7 +433,7 @@ export function EvidenceIntake() {
       {submitMutation.error ? (
         <p className="mc-slot mt-5 inline-flex items-center gap-2 px-3 py-2 text-lg leading-5 text-[#ff9595]">
           <AlertCircle className="h-4 w-4" />
-          {submitMutation.error.message}
+          {toFriendlyErrorMessage(submitMutation.error.message)}
         </p>
       ) : null}
     </motion.section>

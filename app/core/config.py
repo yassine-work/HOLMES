@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     bitmind_api_key: str = ""
     gemini_api_key: str = ""
 
+    stripe_secret_key: str = ""
+    stripe_price_id: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_success_url: str = "http://localhost:3000/verify?upgraded=true"
+    stripe_cancel_url: str = "http://localhost:3000/pricing"
+    stripe_simulation_mode: bool = False
+
     default_admin_email: str = "admin@holmes.local"
     default_admin_password: str = "ChangeMe_Admin123!"
 

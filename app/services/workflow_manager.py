@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import VerificationHistory
+from app.db.models import ContentType, VerificationHistory
 from app.schemas.requests import VerificationRequest
 from app.services.cache_manager import CacheManager
 from app.services.debate_manager import DebateManager
@@ -59,24 +59,73 @@ class WorkflowManager:
             "details": history.details,
         }
 
+    @staticmethod
+    def _is_short_text(payload: VerificationRequest) -> bool:
+        """Return True when text payload is too short for reliable classification."""
+        if payload.content_type != ContentType.TEXT:
+            return False
+
+        cleaned = payload.content.strip()
+        words = [word for word in cleaned.split() if word]
+        return len(cleaned) <= 40 or len(words) <= 4
+
+    async def _store_history(
+        self,
+        user_id: UUID,
+        payload: VerificationRequest,
+        verdict: str,
+        confidence: float,
+        details: dict[str, Any],
+    ) -> VerificationHistory:
+        """Persist a verification history entry and return it."""
+        history = VerificationHistory(
+            user_id=user_id,
+            content_type=payload.content_type,
+            input_reference=payload.content,
+            verdict=verdict,
+            confidence=confidence,
+            details=details,
+        )
+        self.db.add(history)
+        await self.db.commit()
+        await self.db.refresh(history)
+        return history
+
     async def run_verification(self, user_id: UUID, payload: VerificationRequest) -> VerificationHistory:
         """Execute cached or fresh verification flow and persist final result."""
+        if self._is_short_text(payload):
+            details: dict[str, Any] = {
+                "quick_path": "short_text",
+                "debate": {
+                    "verdict": {
+                        "label": "undetermined",
+                        "confidence": 0.4,
+                        "rationale": (
+                            "The submitted text is too short for a reliable authenticity verdict. "
+                            "Please provide a longer statement or more context for accurate analysis."
+                        ),
+                    }
+                },
+            }
+            return await self._store_history(
+                user_id=user_id,
+                payload=payload,
+                verdict="undetermined",
+                confidence=0.4,
+                details=details,
+            )
+
         content_b64 = getattr(payload, "content_b64", None)
         cache_key = self._build_cache_key(payload.content_type.value, payload.content, content_b64=content_b64)
         cached_result = await self.cache.get_json(cache_key)
         if cached_result:
-            history = VerificationHistory(
+            return await self._store_history(
                 user_id=user_id,
-                content_type=payload.content_type,
-                input_reference=payload.content,
+                payload=payload,
                 verdict=str(cached_result.get("verdict", "undetermined")),
                 confidence=float(cached_result.get("confidence", 0.5)),
                 details=cached_result.get("details", {}),
             )
-            self.db.add(history)
-            await self.db.commit()
-            await self.db.refresh(history)
-            return history
 
         results = await asyncio.gather(
             self.sightengine.analyze(payload.content_type.value, payload.content),
@@ -117,17 +166,13 @@ class WorkflowManager:
         verdict_payload = dict(debate_result["verdict"])
         details: dict[str, Any] = {"tools": tool_findings, "debate": debate_result}
 
-        history = VerificationHistory(
+        history = await self._store_history(
             user_id=user_id,
-            content_type=payload.content_type,
-            input_reference=payload.content,
+            payload=payload,
             verdict=str(verdict_payload.get("label", "undetermined")),
             confidence=float(verdict_payload.get("confidence", 0.5)),
             details=details,
         )
-        self.db.add(history)
-        await self.db.commit()
-        await self.db.refresh(history)
 
         await self.cache.set_json(
             cache_key,

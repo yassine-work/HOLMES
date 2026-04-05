@@ -31,14 +31,58 @@ export type VerificationJobStatusResponse = {
 export type LoginResponse = {
   access_token: string;
   token_type: string;
+  is_admin: boolean;
+  is_premium: boolean;
 };
 
 export type RegisterResponse = {
   id: string;
   email: string;
   is_admin: boolean;
+  is_premium: boolean;
   is_active: boolean;
   created_at: string;
+};
+
+export type UserProfile = {
+  id: string;
+  email: string;
+  is_admin: boolean;
+  is_premium: boolean;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type AdminDashboardResponse = {
+  total_users: number;
+  total_verifications: number;
+  total_tasks: number;
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  is_admin: boolean;
+  is_premium: boolean;
+  is_active: boolean;
+};
+
+export type AdminUsersListResponse = {
+  users: AdminUser[];
+};
+
+export type AdminCreateUserPayload = {
+  email: string;
+  password: string;
+  is_admin?: boolean;
+  is_premium?: boolean;
+  is_active?: boolean;
+};
+
+export type AdminUpdateUserPayload = {
+  is_admin?: boolean;
+  is_premium?: boolean;
+  is_active?: boolean;
 };
 
 type UrlStats = {
@@ -349,16 +393,70 @@ export function logoutUser(): void {
 
 export async function canAccessAdminDashboard(): Promise<boolean> {
   try {
-    await requestBackend<{ total_users: number; total_verifications: number; total_tasks: number }>(
-      "/admin/dashboard",
-      { method: "GET" },
-      "Unable to load admin dashboard.",
-      true,
-    );
+    await getAdminDashboard();
     return true;
   } catch {
     return false;
   }
+}
+
+export async function getAdminDashboard(): Promise<AdminDashboardResponse> {
+  return requestBackend<AdminDashboardResponse>(
+    "/admin/dashboard",
+    { method: "GET" },
+    "Unable to load admin dashboard.",
+    true,
+  );
+}
+
+export async function listAdminUsers(): Promise<AdminUser[]> {
+  const response = await requestBackend<AdminUsersListResponse>(
+    "/admin/users",
+    { method: "GET" },
+    "Unable to load users.",
+    true,
+  );
+  return response.users;
+}
+
+export async function createAdminUser(payload: AdminCreateUserPayload): Promise<AdminUser> {
+  return requestBackend<AdminUser>(
+    "/admin/users",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    "Unable to create user.",
+    true,
+  );
+}
+
+export async function updateAdminUser(
+  userId: string,
+  payload: AdminUpdateUserPayload,
+): Promise<AdminUser> {
+  return requestBackend<AdminUser>(
+    `/admin/users/${userId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    "Unable to update user.",
+    true,
+  );
+}
+
+export async function deleteAdminUser(userId: string): Promise<{ status: string; id: string }> {
+  return requestBackend<{ status: string; id: string }>(
+    `/admin/users/${userId}`,
+    {
+      method: "DELETE",
+    },
+    "Unable to delete user.",
+    true,
+  );
 }
 
 export async function getVerificationHistory(): Promise<VerificationJobStatusResponse[]> {
@@ -370,6 +468,33 @@ export async function getVerificationHistory(): Promise<VerificationJobStatusRes
   );
 
   return response.map(mapVerification);
+}
+
+export async function getUserProfile(): Promise<UserProfile> {
+  return requestBackend<UserProfile>(
+    "/auth/me",
+    { method: "GET" },
+    "Unable to load user profile.",
+    true,
+  );
+}
+
+export async function createStripeCheckout(): Promise<{ checkout_url: string }> {
+  return requestBackend<{ checkout_url: string }>(
+    "/stripe/create-checkout-session",
+    { method: "POST" },
+    "Unable to create checkout session.",
+    true,
+  );
+}
+
+export async function unsubscribePremium(): Promise<{ status: string; is_premium: boolean; message?: string }> {
+  return requestBackend<{ status: string; is_premium: boolean; message?: string }>(
+    "/stripe/unsubscribe",
+    { method: "POST" },
+    "Unable to unsubscribe right now.",
+    true,
+  );
 }
 
 export async function createVerificationJob(

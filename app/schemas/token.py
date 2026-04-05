@@ -8,6 +8,8 @@ class Token(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+    is_admin: bool = False
+    is_premium: bool = False
 
 
 class TokenPayload(BaseModel):

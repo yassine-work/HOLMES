@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import create_access_token, get_password_hash, verify_password
+from app.core.deps import get_current_user
 from app.db.database import get_db
 from app.db.models import User
 from app.schemas.requests import LoginRequest
@@ -28,6 +29,7 @@ async def register_user(payload: UserCreate, db: AsyncSession = Depends(get_db))
         hashed_password=get_password_hash(payload.password),
         is_active=True,
         is_admin=False,
+        is_premium=False,
     )
     db.add(user)
     await db.commit()
@@ -47,4 +49,21 @@ async def login_user(payload: LoginRequest, db: AsyncSession = Depends(get_db)) 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
 
     access_token = create_access_token(subject=user.id)
-    return Token(access_token=access_token)
+    return Token(
+        access_token=access_token,
+        is_admin=user.is_admin,
+        is_premium=user.is_premium,
+    )
+
+
+@router.get("/me")
+async def get_me(current_user: User = Depends(get_current_user)) -> dict:
+    """Return authenticated user profile including tier flags."""
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "is_admin": current_user.is_admin,
+        "is_premium": current_user.is_premium,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at.isoformat(),
+    }

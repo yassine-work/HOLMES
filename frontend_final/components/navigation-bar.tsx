@@ -1,21 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { Compass, DoorOpen, ScrollText, ShieldCheck } from "lucide-react";
+import { Compass, DoorOpen, Gem, ScrollText, ShieldCheck, Tags } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { HolmesLogo } from "@/components/holmes-logo";
-import { canAccessAdminDashboard, isAuthenticated, logoutUser } from "@/lib/api";
+import {
+  canAccessAdminDashboard,
+  createStripeCheckout,
+  isAuthenticated,
+  logoutUser,
+  unsubscribePremium,
+} from "@/lib/api";
+import { useUserProfile } from "@/providers/user-profile-provider";
 import { useSound } from "@/providers/sound-provider";
 
 export function NavigationBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { play } = useSound();
+  const { isPremium, isAdmin: profileIsAdmin, refreshProfile } = useUserProfile();
 
   const [authed, setAuthed] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isUnsubscribing, setIsUnsubscribing] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = async () => {
@@ -53,6 +64,53 @@ export function NavigationBar() {
     router.push("/login");
   }
 
+  async function onUpgrade() {
+    if (isUpgrading) {
+      return;
+    }
+
+    setCheckoutError(null);
+    setIsUpgrading(true);
+    play("click");
+
+    try {
+      const response = await createStripeCheckout();
+      window.location.href = response.checkout_url;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create checkout session.";
+      setCheckoutError(
+        message.toLowerCase().includes("payment system not configured")
+          ? "Payment system not configured yet"
+          : message,
+      );
+    } finally {
+      setIsUpgrading(false);
+    }
+  }
+
+  async function onUnsubscribe() {
+    if (isUnsubscribing) {
+      return;
+    }
+
+    setCheckoutError(null);
+    setIsUnsubscribing(true);
+    play("click");
+
+    try {
+      const response = await unsubscribePremium();
+      if (response.message) {
+        setCheckoutError(response.message);
+      }
+      await refreshProfile();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to unsubscribe right now.";
+      setCheckoutError(message);
+    } finally {
+      setIsUnsubscribing(false);
+    }
+  }
+
   const isAuthPage = pathname === "/login" || pathname === "/register";
 
   return (
@@ -78,6 +136,15 @@ export function NavigationBar() {
           >
             <Compass className="h-3.5 w-3.5" />
             Home
+          </Link>
+
+          <Link
+            href="/pricing"
+            onClick={() => play("click")}
+            className="mc-button mc-button-stone inline-flex items-center gap-2 px-3 py-2 text-[10px]"
+          >
+            <Tags className="h-3.5 w-3.5" />
+            Pricing
           </Link>
 
           {authed ? (
@@ -107,6 +174,29 @@ export function NavigationBar() {
                   Admin
                 </Link>
               ) : null}
+
+              {!isPremium ? (
+                <button
+                  type="button"
+                  onClick={onUpgrade}
+                  disabled={isUpgrading}
+                  className="mc-button mc-button-result inline-flex items-center gap-2 px-3 py-2 text-[10px] text-[#eff5ff] disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  <Gem className="h-3.5 w-3.5" />
+                  {isUpgrading ? "Upgrading..." : "Upgrade to Premium"}
+                </button>
+              ) : !profileIsAdmin ? (
+                <button
+                  type="button"
+                  onClick={onUnsubscribe}
+                  disabled={isUnsubscribing}
+                  className="mc-button mc-button-result inline-flex items-center gap-2 px-3 py-2 text-[10px] text-[#eff5ff] disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  <Gem className="h-3.5 w-3.5" />
+                  {isUnsubscribing ? "Unsubscribing..." : "Unsubscribe"}
+                </button>
+              ) : null}
+
               <button
                 type="button"
                 onClick={onLogout}
@@ -144,6 +234,12 @@ export function NavigationBar() {
               </Link>
             </>
           )}
+
+          {checkoutError ? (
+            <span className="mc-slot px-2 py-1 text-lg leading-5 text-[#ff9595]">
+              {checkoutError}
+            </span>
+          ) : null}
         </nav>
       </div>
     </header>

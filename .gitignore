@@ -36,3 +36,33 @@ htmlcov/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Frontend dependencies/build outputs
+node_modules/
+.next/
+dist/
+build/
+
+# Runtime upload/storage folders
+uploads/
+
+# Large media/binary files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.zip
+*.tar
+*.gz
+*.7z
